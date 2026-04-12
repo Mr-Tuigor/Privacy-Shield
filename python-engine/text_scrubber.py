@@ -89,13 +89,26 @@ class PIIEngine:
             "CGPA", "GPA", "Percentage",
         ]}
 
+        # Load additional ignores from a file if it exists
+        try:
+            import os
+            ignore_file_path = os.path.join(os.path.dirname(__file__), "ignore_list.txt")
+            if os.path.exists(ignore_file_path):
+                with open(ignore_file_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        term = line.strip()
+                        if term and not term.startswith("#"):
+                            self.ignore_list.add(term.lower())
+        except Exception as e:
+            print(f"Warning: Could not load ignore_list.txt: {e}")
+
         # ---------- Regex patterns — ORDER MATTERS ----------
         # Patterns are checked in this order. More specific patterns first to
         # prevent partial matches (e.g., Aadhaar before PIN).
         self.regex_patterns = [
-            # Email: OCR-tolerant (allows brackets, spaces around @ and .)
+            # Email: OCR-tolerant (allows brackets, spaces, and numbers in domain/TLD due to OCR artifacts)
             (
-                r'[A-Za-z0-9._%+\-\[\]]+\s*@\s*[A-Za-z0-9.\-]+\s*\.\s*[A-Za-z]{2,}',
+                r'[A-Za-z0-9._%+\-\[\]\|\(\)]+\s*(?:@|\[at\]|\(at\)| at | a )\s*[A-Za-z0-9.\-\[\]\|\(\)]+\s*\.\s*[A-Za-z0-9]{2,}',
                 "EMAIL"
             ),
             # URL: http(s) URLs and www. URLs
@@ -160,8 +173,9 @@ class PIIEngine:
             return True
         # Check if the entity is a substring of any ignored term or vice versa
         for ignored in self.ignore_list:
-            if text_lower == ignored:
-                return True
+            if len(text_lower) >= 3 and len(ignored) >= 3:
+                if text_lower in ignored or ignored in text_lower:
+                    return True
         return False
 
     def _get_existing_token(self, text: str, label_type: str) -> Optional[str]:

@@ -42,6 +42,7 @@ class PDFHandler:
                 "extraction_method": None,
                 "original_text": "",
                 "sanitized_text": "",
+                "original_image_base64": None,  # Added to send original image base64
                 "redacted_image_base64": None,
             }
 
@@ -69,6 +70,9 @@ class PDFHandler:
                     )
                     page_data["original_text"] = ocr_result["original_text"]
                     page_data["sanitized_text"] = ocr_result["sanitized_text"]
+                    # Replacing the single base64 assignment with both images for the response
+                    # page_data["redacted_image_base64"] = ocr_result["redacted_image_base64"]
+                    page_data["original_image_base64"] = ocr_result["original_image_base64"]
                     page_data["redacted_image_base64"] = ocr_result["redacted_image_base64"]
                 else:
                     page_data["original_text"] = "[Could not render page]"

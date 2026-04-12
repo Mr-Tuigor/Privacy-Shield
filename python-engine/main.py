@@ -136,7 +136,10 @@ async def redact_image(file: UploadFile = File(...)):
         "status": "success",
         "original_text": result["original_text"],
         "sanitized_text": result["sanitized_text"],
-        "redacted_image_base64": result["redacted_image_base64"],
+        # Commented out the old behavior of only sending the redacted image:
+        # "redacted_image_base64": result["redacted_image_base64"],
+        "original_image_base64": result["original_image_base64"],  # New: return original image
+        "redacted_image_base64": result["redacted_image_base64"],  # New: return redacted image
         "pii_map": engine.pii_map,
         "entities": result["entities"],
     }

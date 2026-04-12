@@ -1,0 +1,77 @@
+# Custom Ignore List for Privacy Shield
+# Add any words here that you DO NOT want to be redacted.
+# One word or phrase per line. Lines starting with # are comments.
+
+# Example:
+suryodaya college
+job
+internship
+rtmnu
+java
+pandas
+numpy
+typescript
+python
+javascript
+html
+css
+react
+angular
+vue
+nodejs
+expressjs
+sql
+postgresql
+mysql
+mongodb
+firebase
+aws
+azure
+gcp
+linux
+windows
+macos
+android
+ios
+flutter
+react native
+swift
+kotlin
+java
+python
+javascript
+html
+css
+react
+angular
+vue
+node
+express
+sql
+postgresql
+mysql
+mongodb
+firebase
+aws
+azure
+gcp
+linux
+windows
+macos
+android
+ios
+flutter
+react native
+swift
+kotlin
+full stack web developer
+backend developer
+full stack app developer
+full stack developer
+frontend developer
+developer
+electronics and telecommunications
+college
+school
+english
+NPTEL
