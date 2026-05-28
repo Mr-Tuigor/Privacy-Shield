@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Shield UI Tester</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      text-align: center;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(to right, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      margin-bottom: 3rem;
+    }
+
+    .glass-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      transition: transform 0.3s ease;
+    }
+
+    .glass-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      justify-content: center;
+    }
+
+    .tab-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-family: 'Outfit', sans-serif;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      animation: fadeIn 0.4s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    label {
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
+    input[type="file"],
+    textarea {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 1rem;
+      border-radius: 8px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+    }
+
+    button.submit-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 1rem 2rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+      margin-top: 1rem;
+      align-self: flex-start;
+    }
+
+    /* PDF image */
+
+    .image-preview {
+      width: 100%;
+      max-height: 500px;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+
+    /* pdf image */
+
+    button.submit-btn:hover {
+      background: var(--accent-hover);
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    }
+
+    .spinner {
+      display: none;
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border-top: 3px solid var(--accent);
+      width: 24px;
+      height: 24px;
+      animation: spin 1s linear infinite;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* Results section */
+    #results-container {
+      display: none;
+      margin-top: 2rem;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-top: 1rem;
+    }
+
+    .result-box {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      overflow-wrap: break-word;
+    }
+
+    .result-box h3 {
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .image-preview {
+      width: 100%;
+      max-height: 400px;
+      object-fit: contain;
+      border-radius: 8px;
+      margin-top: 1rem;
+      border: 1px solid var(--border-color);
+      background: rgba(0, 0, 0, 0.4);
+    }
+
+    .text-preview {
+      white-space: pre-wrap;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: #e2e8f0;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 1rem;
+      border-radius: 6px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: rgba(59, 130, 246, 0.2);
+      color: #93c5fd;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .results-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <h1>Privacy Shield</h1>
+    <p class="subtitle">Intelligently detect and redact PII from text, images, and PDFs</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('text')">Text Input</button>
+      <button class="tab-btn" onclick="switchTab('image')">Image Upload</button>
+      <button class="tab-btn" onclick="switchTab('pdf')">PDF Upload</button>
+    </div>
+
+    <!-- Text Form -->
+    <div id="tab-text" class="glass-card tab-content active">
+      <div>
+        <label>Enter Sensitive Text</label>
+        <textarea id="text-input" rows="6"
+          placeholder="e.g. My name is Alice and my phone number is 555-1234."></textarea>
+      </div>
+      <div>
+        <button class="submit-btn" onclick="submitText()">
+          Scrub Text <span id="spinner-text" class="spinner"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Image Form -->
+    <div id="tab-image" class="glass-card tab-content">
+      <div>
+        <label>Upload an Image (.png, .jpg, etc)</label>
+        <input type="file" id="image-file" accept="image/*">
+      </div>
+      <div>
+        <button class="submit-btn" onclick="submitImage()">
+          Redact Image <span id="spinner-image" class="spinner"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- PDF Form -->
+    <div id="tab-pdf" class="glass-card tab-content">
+      <div>
+        <label>Upload a PDF Document</label>
+        <input type="file" id="pdf-file" accept="application/pdf">
+      </div>
+      <div>
+        <button class="submit-btn" onclick="submitPdf()">
+          Redact PDF <span id="spinner-pdf" class="spinner"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Results Area -->
+    <div id="results-container" class="glass-card">
+      <h2 style="margin-bottom: 1.5rem; color: white;">Analysis Results</h2>
+
+      <div id="entities-container" style="margin-bottom: 1.5rem;"></div>
+
+      <div class="results-grid" id="main-results">
+        <!-- Will be populated dynamically -->
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:8000/api";
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+      document.getElementById('tab-' + tabId).classList.add('active');
+      event.target.classList.add('active');
+
+      // Hide results container when switching
+      document.getElementById('results-container').style.display = 'none';
+    }
+
+    function toggleSpinner(id, show) {
+      document.getElementById(id).style.display = show ? 'inline-block' : 'none';
+    }
+
+    function renderEntities(entitiesInfo) {
+      const container = document.getElementById('entities-container');
+      if (!entitiesInfo || entitiesInfo.total_entities === 0) {
+        container.innerHTML = '<span style="color: var(--text-muted)">No PII detected.</span>';
+        return;
+      }
+
+      let html = `<p style="margin-bottom: 0.5rem">Found <strong>${entitiesInfo.total_entities}</strong> sensitive items:</p>`;
+      for (const [type, count] of Object.entries(entitiesInfo.by_type)) {
+        html += `<span class="badge">${type}: ${count}</span>`;
+      }
+      container.innerHTML = html;
+    }
+
+    function showResultsContainers() {
+      document.getElementById('results-container').style.display = 'block';
+    }
+
+    async function submitText() {
+      const text = document.getElementById('text-input').value;
+      if (!text) return alert('Please enter some text');
+
+      toggleSpinner('spinner-text', true);
+      try {
+        const res = await fetch(`${API_BASE}/scrub-text`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+
+        renderEntities(data.entities);
+        document.getElementById('main-results').innerHTML = `
+          <div class="result-box">
+            <h3>Original text</h3>
+            <div class="text-preview">${data.original}</div>
+          </div>
+          <div class="result-box">
+            <h3>Sanitized text</h3>
+            <div class="text-preview" style="color: #a78bfa;">${data.sanitized}</div>
+          </div>
+        `;
+        showResultsContainers();
+      } catch (e) {
+        alert("API Error: " + e.message);
+      }
+      toggleSpinner('spinner-text', false);
+    }
+
+    async function submitImage() {
+      const fileInput = document.getElementById('image-file');
+      if (!fileInput.files.length) return alert('Please select an image');
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      toggleSpinner('spinner-image', true);
+      try {
+        const res = await fetch(`${API_BASE}/redact-image`, { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.detail || "Server error");
+
+        renderEntities(data.entities);
+        document.getElementById('main-results').innerHTML = `
+          <div class="result-box">
+            <h3>📸 Original Image</h3>
+            <img src="${data.original_image_base64}" class="image-preview">
+            <h4 style="margin-top:1rem; color:var(--text-muted)">Extracted Text:</h4>
+            <div class="text-preview">${data.original_text || "No text"}</div>
+          </div>
+          <div class="result-box">
+            <h3>🛡️ Masked Image</h3>
+            <img src="${data.redacted_image_base64}" class="image-preview" style="border-color: #ef4444">
+            <h4 style="margin-top:1rem; color:var(--text-muted)">Sanitized Text:</h4>
+            <div class="text-preview" style="color: #a78bfa;">${data.sanitized_text || "No text"}</div>
+          </div>
+        `;
+        showResultsContainers();
+      } catch (e) {
+        alert("API Error: " + e.message);
+      }
+      toggleSpinner('spinner-image', false);
+    }
+
+    async function submitPdf() {
+      const fileInput = document.getElementById('pdf-file');
+      if (!fileInput.files.length) return alert('Please select a PDF');
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      toggleSpinner('spinner-pdf', true);
+      try {
+        const res = await fetch(`${API_BASE}/redact-pdf`, { method: 'POST', body: formData });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.detail || "Server error");
+
+        renderEntities(data.entities);
+
+        // Build view for all pages
+        let gridHtml = '';
+        data.pages.forEach(p => {
+          gridHtml += `
+    <div class="result-box" style="grid-column: 1 / -1; background: rgba(0,0,0,0.4); text-align: center; margin-top:1rem;">
+      <h2 style="color:white;">
+        Page ${p.page_number} (${p.extraction_method || 'Unknown'})
+      </h2>
+    </div>
+  `;
+
+          // ✅ ALWAYS prefer image view if available
+          if (p.original_image_base64 && p.redacted_image_base64) {
+            gridHtml += `
+      <div class="result-box">
+        <h3>Original PDF Page</h3>
+        <img src="${p.original_image_base64}" class="image-preview">
+        <div class="text-preview" style="margin-top:1rem;">
+          ${p.original_text || ''}
+        </div>
+      </div>
+
+      <div class="result-box">
+        <h3>Redacted PDF Page</h3>
+        <img src="${p.redacted_image_base64}" class="image-preview" style="border-color: #ef4444">
+        <div class="text-preview" style="margin-top:1rem; color: #a78bfa;">
+          ${p.sanitized_text || ''}
+        </div>
+      </div>
+    `;
+          }
+          // ⚠️ fallback (should rarely happen now)
+          else {
+            gridHtml += `
+      <div class="result-box" style="grid-column: 1 / -1; display:flex; gap:1rem;">
+        <div style="flex:1">
+          <h3>Original Text</h3>
+          <div class="text-preview">${p.original_text}</div>
+        </div>
+        <div style="flex:1">
+          <h3>Masked Text</h3>
+          <div class="text-preview" style="color: #a78bfa;">
+            ${p.sanitized_text}
+          </div>
+        </div>
+      </div>
+    `;
+          }
+        });;
+
+        document.getElementById('main-results').innerHTML = gridHtml;
+        showResultsContainers();
+      } catch (e) {
+        alert("API Error: " + e.message);
+      }
+      toggleSpinner('spinner-pdf', false);
+    }
+  </script>
+</body>
+
+</html>

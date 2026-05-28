@@ -47,19 +47,32 @@ class PDFHandler:
             }
 
             if page_text and len(page_text) > 20:
-                # ── Digital PDF page: extract text directly ──
+                # ── Digital PDF page: extract text + render image ──
                 page_data["extraction_method"] = "digital"
                 page_data["original_text"] = page_text
                 page_data["sanitized_text"] = pii_engine.scrub(page_text)
+
+                    # --- NEW: render image for visualization ---
+                mat = fitz.Matrix(2.0, 2.0)
+                pix = page.get_pixmap(matrix=mat)
+
+                img_data = pix.tobytes("png")
+                nparr = np.frombuffer(img_data, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img is not None:
+                    ocr_result = self.image_redactor.redact_image_from_numpy(
+                        img, pii_engine
+                    )
+
+                    page_data["original_image_base64"] = ocr_result["original_image_base64"]
+                    page_data["redacted_image_base64"] = ocr_result["redacted_image_base64"]
             else:
                 # ── Scanned PDF page: render as image → OCR ──
                 page_data["extraction_method"] = "ocr"
 
-                # Render page at 2x resolution for better OCR accuracy
                 mat = fitz.Matrix(2.0, 2.0)
                 pix = page.get_pixmap(matrix=mat)
-                
-                # Convert PyMuPDF pixmap to NumPy array for OpenCV
+
                 img_data = pix.tobytes("png")
                 nparr = np.frombuffer(img_data, np.uint8)
                 img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -70,8 +83,6 @@ class PDFHandler:
                     )
                     page_data["original_text"] = ocr_result["original_text"]
                     page_data["sanitized_text"] = ocr_result["sanitized_text"]
-                    # Replacing the single base64 assignment with both images for the response
-                    # page_data["redacted_image_base64"] = ocr_result["redacted_image_base64"]
                     page_data["original_image_base64"] = ocr_result["original_image_base64"]
                     page_data["redacted_image_base64"] = ocr_result["redacted_image_base64"]
                 else:

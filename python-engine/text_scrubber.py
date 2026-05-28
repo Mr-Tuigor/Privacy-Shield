@@ -86,7 +86,7 @@ class PIIEngine:
             "LinkedIn", "Twitter", "Facebook", "Instagram", "Portfolio",
             "Bachelor", "Master", "PhD", "B.Tech", "M.Tech", "B.E.", "M.E.",
             "MBA", "BCA", "MCA", "B.Sc", "M.Sc", "B.Com", "M.Com",
-            "CGPA", "GPA", "Percentage",
+            "CGPA", "GPA", "Percentage", "Internship"
         ]}
 
         # Load additional ignores from a file if it exists
