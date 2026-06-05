@@ -406,3 +406,11 @@ Athena
 Hermes
 Apollo
 Titan
+# Added via UI
+daily
+3 yrs
+monthly
+store keeper
+dist
+tal
+vill

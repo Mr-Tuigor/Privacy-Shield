@@ -1,320 +1,391 @@
-import spacy
+"""
+text_scrubber.py
+~~~~~~~~~~~~~~~~
+Presidio-powered PII detection and replacement engine for Privacy Shield.
+
+Key improvements over the previous spaCy-only approach:
+  • Microsoft Presidio provides per-entity CONFIDENCE SCORES — borderline
+    predictions are filtered out rather than blindly redacted.
+  • Context-aware boosting: if "email" appears near an email-like pattern,
+    the confidence rises automatically.
+  • phonenumbers library (backed by Google's libphonenumber) replaces the
+    fragile digit-counting regex for phone numbers.
+  • Overlapping / duplicate spans are deduplicated before replacement.
+  • ORG detection uses a strict 0.80 threshold to eliminate tech-stack FPs.
+  • Custom PatternRecognizers for Indian Aadhaar, PAN, PIN, and Passport.
+  • Same public API (scrub / restore / get_summary) — no frontend changes.
+"""
+
 import re
+import os
 from typing import Optional
+
+import phonenumbers
+
+from presidio_analyzer import (
+    AnalyzerEngine,
+    PatternRecognizer,
+    Pattern,
+    RecognizerRegistry,
+)
+from presidio_analyzer.nlp_engine import NlpEngineProvider
+
+
+# ── Entity-type mapping: Presidio name → our internal label ────────────────
+PRESIDIO_TO_LABEL: dict[str, str] = {
+    "PERSON":           "PERSON",
+    "ORGANIZATION":     "ORG",
+    "LOCATION":         "LOCATION",
+    "EMAIL_ADDRESS":    "EMAIL",
+    "PHONE_NUMBER":     "PHONE",
+    "IN_AADHAAR":       "AADHAAR",
+    "IN_PAN":           "PAN",
+    "US_SSN":           "SSN",
+    "DATE_TIME":        "DATE",
+    "IP_ADDRESS":       "IP",
+    "URL":              "URL",
+    "CREDIT_CARD":      "CREDIT_CARD",
+    "IN_PIN":           "PIN",
+    "IN_PASSPORT":      "PASSPORT",
+}
+
+# ── Per-entity confidence thresholds ───────────────────────────────────────
+# Higher → fewer false positives.  Lower → fewer missed detections.
+# Tuned so that common tech-term false positives (ORG) are strongly filtered
+# while structured patterns (EMAIL, CREDIT_CARD) pass easily.
+THRESHOLDS: dict[str, float] = {
+    "PERSON":        0.70,   # Reasonable — NER is fairly reliable for names
+    "ORGANIZATION":  0.80,   # Strict — biggest FP source (tech stacks, tools)
+    "LOCATION":      0.65,   # Slightly permissive — location names are distinctive
+    "EMAIL_ADDRESS": 0.50,   # Presidio email recogniser is very precise
+    "PHONE_NUMBER":  0.40,   # Presidio scores phones at 0.4; phonenumbers validates correctness
+    "IN_AADHAAR":    0.85,
+    "IN_PAN":        0.85,
+    "US_SSN":        0.85,
+    "DATE_TIME":     0.55,   # Presidio dates score at 0.6 — keep threshold below that
+    "IP_ADDRESS":    0.85,
+    "URL":           0.50,   # URLs are structurally clear
+    "CREDIT_CARD":   0.85,   # Presidio applies Luhn check internally
+    "IN_PIN":        0.75,
+    "IN_PASSPORT":   0.80,
+}
+
+# Entities Presidio should look for (all keys of the mapping above)
+_ENTITIES_TO_DETECT = list(PRESIDIO_TO_LABEL.keys())
 
 
 class PIIEngine:
     """
     Detects and replaces Personally Identifiable Information (PII) in text.
-    
-    Each instance maintains its own mapping of tokens → original values, making it
-    safe to create one instance per request to avoid cross-request data leaks.
-    
+
+    Each instance maintains its own mapping of tokens → original values, making
+    it safe to create one instance per request to avoid cross-request data leaks.
+
     Supported PII types:
-        - PERSON  — Names (via spaCy NER)
-        - ORG     — Organization names (via spaCy NER)
-        - LOCATION — Cities, countries, addresses (via spaCy NER: GPE, LOC, FAC)
-        - EMAIL   — Email addresses (OCR-tolerant regex)
-        - PHONE   — Phone numbers (Indian, US, international formats)
-        - AADHAAR — Indian Aadhaar numbers (XXXX XXXX XXXX)
-        - PAN     — Indian PAN card numbers (ABCDE1234F)
-        - DOB     — Dates that likely represent dates of birth
-        - DATE    — General date patterns
-        - SSN     — US Social Security Numbers (XXX-XX-XXXX)
-        - PASSPORT— Passport number patterns
-        - PIN     — Standalone 6-digit PIN/zip codes
-        - URL     — URLs that may contain personal identifiers
-        - IP      — IP addresses
-        - CREDIT_CARD — Credit/debit card numbers
+        PERSON, ORG, LOCATION, EMAIL, PHONE, AADHAAR, PAN, SSN, PASSPORT,
+        DATE, IP, URL, CREDIT_CARD, PIN
     """
 
-    # Class-level NLP model — loaded once, shared across all instances
-    _nlp = None
+    # ── Class-level singleton — loaded once at startup ─────────────────────
+    _analyzer: Optional[AnalyzerEngine] = None
+
+    # Legacy alias used by main.py startup warm-up
+    _nlp = True  # Signals "loaded" without exposing internals
 
     @classmethod
-    def _load_nlp(cls):
-        if cls._nlp is None:
-            print("[*] Loading spaCy NLP model (en_core_web_lg)...")
-            try:
-                cls._nlp = spacy.load("en_core_web_lg")
-                print("[+] spaCy model loaded successfully.")
-            except OSError:
-                print("[!] en_core_web_lg not found, falling back to en_core_web_sm")
-                cls._nlp = spacy.load("en_core_web_sm")
-                print("[+] spaCy model (sm) loaded successfully.")
+    def _build_analyzer(cls) -> AnalyzerEngine:
+        """Build and cache the Presidio AnalyzerEngine (called once)."""
+        if cls._analyzer is not None:
+            return cls._analyzer
 
-        return cls._nlp
+        print("[*] Loading Presidio PII engine with spaCy (en_core_web_lg)...")
+
+        # ── Configure spaCy NLP backend ────────────────────────────────────
+        spacy_config = {
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}],
+        }
+        try:
+            provider = NlpEngineProvider(nlp_configuration=spacy_config)
+            nlp_engine = provider.create_engine()
+            print("[+] spaCy en_core_web_lg loaded.")
+        except Exception:
+            print("[!] en_core_web_lg not found, falling back to en_core_web_sm")
+            spacy_config["models"] = [{"lang_code": "en", "model_name": "en_core_web_sm"}]
+            provider = NlpEngineProvider(nlp_configuration=spacy_config)
+            nlp_engine = provider.create_engine()
+            print("[+] spaCy en_core_web_sm loaded.")
+
+        # ── Build recogniser registry ──────────────────────────────────────
+        registry = RecognizerRegistry()
+        registry.load_predefined_recognizers(nlp_engine=nlp_engine)
+
+        # Indian Aadhaar: XXXX XXXX XXXX or XXXX-XXXX-XXXX
+        registry.add_recognizer(PatternRecognizer(
+            supported_entity="IN_AADHAAR",
+            patterns=[Pattern("aadhaar", r"\b\d{4}[\s\-]\d{4}[\s\-]\d{4}\b", 0.85)],
+            context=["aadhaar", "uid", "unique identification", "uidai"],
+        ))
+
+        # Indian PAN card: ABCDE1234F
+        registry.add_recognizer(PatternRecognizer(
+            supported_entity="IN_PAN",
+            patterns=[Pattern("pan", r"\b[A-Z]{5}\d{4}[A-Z]\b", 0.85)],
+            context=["pan", "permanent account", "income tax", "tax"],
+        ))
+
+        # Indian 6-digit PIN / postal code (with context requirement)
+        registry.add_recognizer(PatternRecognizer(
+            supported_entity="IN_PIN",
+            patterns=[
+                Pattern("pin_with_context", r"(?<!\d[\s\-])\b\d{6}\b(?![\s\-]\d)", 0.50)
+            ],
+            context=["pin", "pincode", "postal", "zip", "area code", "code"],
+        ))
+
+        # Indian / generic passport: Letter + 7-8 digits
+        registry.add_recognizer(PatternRecognizer(
+            supported_entity="IN_PASSPORT",
+            patterns=[Pattern("passport", r"\b[A-Z][0-9]{7,8}\b", 0.60)],
+            context=["passport", "travel document", "passport no", "passport number"],
+        ))
+
+        # US Social Security Number: XXX-XX-XXXX (custom to catch without context)
+        registry.add_recognizer(PatternRecognizer(
+            supported_entity="US_SSN",
+            patterns=[Pattern("ssn_pattern", r"\b\d{3}-\d{2}-\d{4}\b", 0.85)],
+            context=["ssn", "social security", "social security number"],
+        ))
+
+        cls._analyzer = AnalyzerEngine(
+            registry=registry,
+            nlp_engine=nlp_engine,
+            supported_languages=["en"],
+        )
+        print("[+] Presidio AnalyzerEngine ready.")
+        return cls._analyzer
+
+    # Legacy warm-up method called from main.py
+    @classmethod
+    def _load_nlp(cls):
+        cls._build_analyzer()
+
+    # ── Instance ───────────────────────────────────────────────────────────
 
     def __init__(self):
-        self.nlp = self._load_nlp()
-        self.pii_map: dict[str, str] = {}
-        self.counters: dict[str, int] = {
-            "PERSON": 1, "ORG": 1, "LOCATION": 1,
-            "EMAIL": 1, "PHONE": 1, "AADHAAR": 1, "PAN": 1,
-            "DOB": 1, "DATE": 1, "SSN": 1, "PASSPORT": 1,
-            "PIN": 1, "URL": 1, "IP": 1, "CREDIT_CARD": 1,
+        self.analyzer = self._build_analyzer()
+        self.pii_map:         dict[str, str]  = {}
+        self.counters:        dict[str, int]  = {
+            label: 1 for label in set(PRESIDIO_TO_LABEL.values())
         }
-        self.entities_found: list[dict] = []  # Track what was detected for reporting
+        self.entities_found:  list[dict]      = []
 
-        # ---------- Allowlist: terms that should NEVER be flagged ----------
-        # Common resume section headers, tech skills, programming languages,
-        # frameworks, and generic labels that spaCy often misclassifies.
-        self.ignore_list = {term.lower() for term in [
+        # Load allowlist (terms that must NEVER be redacted)
+        self.ignore_set: set[str] = self._load_ignore_set()
+
+    # ── Allowlist loading ──────────────────────────────────────────────────
+
+    def _load_ignore_set(self) -> set[str]:
+        """Return a set of lower-cased terms that must never be flagged."""
+        defaults = {
             # Section headers & labels
-            "Email", "Address", "Github", "Contact", "Phone", "About Me",
-            "Skills", "Language", "Languages", "Education", "Experience",
-            "Projects", "Certifications", "Objective", "Summary", "References",
-            "Hobbies", "Interests", "Declaration", "Profile", "Resume", "CV",
+            "email", "address", "github", "contact", "phone", "about me",
+            "skills", "language", "languages", "education", "experience",
+            "projects", "certifications", "objective", "summary", "references",
+            "hobbies", "interests", "declaration", "profile", "resume", "cv",
             # Programming & tech
-            "MERN", "MERN stack", "Web", "Javascript", "TypeScript",
-            "Python", "C++", "C#", "Java", "Go", "Rust", "Ruby", "PHP", "Swift",
-            "Kotlin", "Dart", "Scala", "R", "MATLAB", "SQL", "NoSQL",
-            "React", "Angular", "Vue", "Svelte", "Next.js", "Nuxt",
-            "Node.js", "Express.js", "Django", "Flask", "FastAPI", "Spring",
-            "MongoDB", "PostgreSQL", "MySQL", "Redis", "Firebase",
-            "Docker", "Kubernetes", "AWS", "Azure", "GCP",
-            "HTML", "CSS", "Tailwind", "Bootstrap", "EJS",
-            "Git", "GitHub", "GitLab", "Bitbucket", "VS Code",
-            "Numpy", "Pandas", "TensorFlow", "PyTorch", "scikit-learn",
-            "Data Analytics", "Machine Learning", "AI", "Deep Learning",
-            "REST", "GraphQL", "API", "CI/CD", "DevOps", "Agile", "Scrum",
-            # Languages (spoken)
-            "Hindi", "English", "French", "Spanish", "German", "Marathi",
-            "Tamil", "Telugu", "Kannada", "Bengali", "Gujarati", "Urdu",
-            "Punjabi", "Malayalam", "Odia",
-            # Common false positives
-            "LinkedIn", "Twitter", "Facebook", "Instagram", "Portfolio",
-            "Bachelor", "Master", "PhD", "B.Tech", "M.Tech", "B.E.", "M.E.",
-            "MBA", "BCA", "MCA", "B.Sc", "M.Sc", "B.Com", "M.Com",
-            "CGPA", "GPA", "Percentage", "Internship"
-        ]}
+            "mern", "mern stack", "web", "javascript", "typescript",
+            "python", "c++", "c#", "java", "go", "rust", "ruby", "php", "swift",
+            "kotlin", "dart", "scala", "r", "matlab", "sql", "nosql",
+            "react", "angular", "vue", "svelte", "next.js", "nuxt",
+            "node.js", "express.js", "django", "flask", "fastapi", "spring",
+            "mongodb", "postgresql", "mysql", "redis", "firebase",
+            "docker", "kubernetes", "aws", "azure", "gcp",
+            "html", "css", "tailwind", "bootstrap", "ejs",
+            "git", "github", "gitlab", "bitbucket", "vs code",
+            "numpy", "pandas", "tensorflow", "pytorch", "scikit-learn",
+            "data analytics", "machine learning", "ai", "deep learning",
+            "rest", "graphql", "api", "ci/cd", "devops", "agile", "scrum",
+            # Spoken languages
+            "hindi", "english", "french", "spanish", "german", "marathi",
+            "tamil", "telugu", "kannada", "bengali", "gujarati", "urdu",
+            "punjabi", "malayalam", "odia",
+            # Common résumé false positives
+            "linkedin", "twitter", "facebook", "instagram", "portfolio",
+            "bachelor", "master", "phd", "b.tech", "m.tech", "b.e.", "m.e.",
+            "mba", "bca", "mca", "b.sc", "m.sc", "b.com", "m.com",
+            "cgpa", "gpa", "percentage", "internship", "nptel",
+        }
 
-        # Load additional ignores from a file if it exists
+        # Merge in ignore_list.txt
         try:
-            import os
-            ignore_file_path = os.path.join(os.path.dirname(__file__), "ignore_list.txt")
-            if os.path.exists(ignore_file_path):
-                with open(ignore_file_path, "r", encoding="utf-8") as f:
-                    for line in f:
+            path = os.path.join(os.path.dirname(__file__), "ignore_list.txt")
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as fh:
+                    for line in fh:
                         term = line.strip()
                         if term and not term.startswith("#"):
-                            self.ignore_list.add(term.lower())
+                            defaults.add(term.lower())
         except Exception as e:
-            print(f"Warning: Could not load ignore_list.txt: {e}")
+            print(f"[!] Warning: Could not load ignore_list.txt: {e}")
 
-        # ---------- Regex patterns — ORDER MATTERS ----------
-        # Patterns are checked in this order. More specific patterns first to
-        # prevent partial matches (e.g., Aadhaar before PIN).
-        self.regex_patterns = [
-            # Email: OCR-tolerant (allows brackets, spaces, and numbers in domain/TLD due to OCR artifacts)
-            (
-                r'[A-Za-z0-9._%+\-\[\]\|\(\)]+\s*(?:@|\[at\]|\(at\)| at | a )\s*[A-Za-z0-9.\-\[\]\|\(\)]+\s*\.\s*[A-Za-z0-9]{2,}',
-                "EMAIL"
-            ),
-            # URL: http(s) URLs and www. URLs
-            (
-                r'https?://[^\s<>\"\']+|www\.[^\s<>\"\']+',
-                "URL"
-            ),
-            # IP Address: IPv4
-            (
-                r'\b(?:\d{1,3}\.){3}\d{1,3}\b',
-                "IP"
-            ),
-            # Credit Card: 13-19 digit numbers with optional spaces/dashes
-            (
-                r'\b(?:\d[ \-]?){13,19}\b',
-                "CREDIT_CARD"
-            ),
-            # Aadhaar: XXXX XXXX XXXX or XXXX-XXXX-XXXX (Indian 12-digit ID)
-            (
-                r'\b\d{4}[\s\-]\d{4}[\s\-]\d{4}\b',
-                "AADHAAR"
-            ),
-            # PAN Card: ABCDE1234F (Indian tax ID — 5 letters, 4 digits, 1 letter)
-            (
-                r'\b[A-Z]{5}\d{4}[A-Z]\b',
-                "PAN"
-            ),
-            # SSN: XXX-XX-XXXX (US Social Security Number)
-            (
-                r'\b\d{3}-\d{2}-\d{4}\b',
-                "SSN"
-            ),
-            # Passport: Letter followed by 7-8 digits (Indian + many international formats)
-            (
-                r'\b[A-Z][0-9]{7,8}\b',
-                "PASSPORT"
-            ),
-            # Phone: International formats — must come before PIN
-            # Supports: +91-XXXXX-XXXXX, (XXX) XXX-XXXX, +1-XXX-XXX-XXXX, etc.
-            (
-                r'(?:\+?\d{1,3}[\s\-]?)?\(?\d{2,5}\)?[\s\-]?\d{3,5}[\s\-]?\d{3,5}\b',
-                "PHONE"
-            ),
-            # Date / DOB: DD/MM/YYYY, MM-DD-YYYY, YYYY-MM-DD, DD.MM.YYYY
-            (
-                r'\b\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}\b|\b\d{4}[/\-\.]\d{1,2}[/\-\.]\d{1,2}\b',
-                "DATE"
-            ),
-            # PIN / Zip Code: Standalone 6-digit code (Indian PIN) — word boundaries prevent
-            # matching inside phone numbers or Aadhaar numbers
-            (
-                r'(?<!\d[\s\-])\b\d{6}\b(?![\s\-]\d)',
-                "PIN"
-            ),
-        ]
+        return defaults
 
     def _is_ignored(self, text: str) -> bool:
-        """Check if the text matches any term in the allowlist."""
+        """Return True if the span matches any allowlist term."""
         text_lower = text.lower().strip()
-        # Exact match
-        if text_lower in self.ignore_list:
+        if text_lower in self.ignore_set:
             return True
-        # Check if the entity is a substring of any ignored term or vice versa
-        for ignored in self.ignore_list:
-            if len(text_lower) >= 3 and len(ignored) >= 3:
-                if text_lower in ignored or ignored in text_lower:
+        # Substring check — but ONLY for non-numeric terms.
+        # Numeric entries (port numbers, versions, etc.) from ignore_list.txt
+        # must match EXACTLY to avoid blocking phone numbers, credit cards, etc.
+        if len(text_lower) >= 4:
+            for ignored in self.ignore_set:
+                if len(ignored) >= 4 and not ignored.isdigit() and ignored in text_lower:
                     return True
         return False
 
-    def _get_existing_token(self, text: str, label_type: str) -> Optional[str]:
-        """
-        Check if this PII value (or something very similar) was already assigned a token.
-        This prevents the same name from getting [PERSON_1] and [PERSON_2].
-        """
-        text_clean = text.strip().lower()
-        for token, original_value in self.pii_map.items():
-            if not token.startswith(f"[{label_type}"):
-                continue
-            original_clean = original_value.strip().lower()
-            # Exact match (case-insensitive)
-            if text_clean == original_clean:
-                return token
-            # Substring containment (e.g., "Amit" inside "Amit Sharma")
-            if len(text_clean) >= 3 and len(original_clean) >= 3:
-                if text_clean in original_clean or original_clean in text_clean:
-                    return token
-        return None
 
-    def _create_token(self, original_text: str, label_type: str) -> str:
-        """Create a new placeholder token and register it in the PII map."""
+    # ── Token management ───────────────────────────────────────────────────
+
+    def _get_or_create_token(self, original_text: str, label_type: str) -> str:
+        """Return an existing token for this value, or create a new one."""
+        original_clean = original_text.strip().lower()
+
+        for token, stored_val in self.pii_map.items():
+            if not token.startswith(f"[{label_type}_"):
+                continue
+            stored_clean = stored_val.strip().lower()
+            if original_clean == stored_clean:
+                return token
+            # Partial name matching (e.g. "Amit" ↔ "Amit Sharma")
+            if len(original_clean) >= 3 and len(stored_clean) >= 3:
+                if original_clean in stored_clean or stored_clean in original_clean:
+                    return token
+
+        # New token
         token = f"[{label_type}_{self.counters[label_type]}]"
         self.pii_map[token] = original_text
         self.counters[label_type] += 1
         self.entities_found.append({
-            "type": label_type,
-            "original": original_text,
+            "type":        label_type,
+            "original":    original_text,
             "replacement": token,
         })
         return token
 
-    def _replace_in_text(self, text: str, original: str, label_type: str) -> str:
-        """Replace a PII match in the text, reusing existing tokens if possible."""
-        existing_token = self._get_existing_token(original, label_type)
-        if existing_token:
-            return text.replace(original, existing_token)
-        else:
-            token = self._create_token(original, label_type)
-            return text.replace(original, token)
+    # ── Phone validation ───────────────────────────────────────────────────
+
+    @staticmethod
+    def _validate_phone(text: str) -> bool:
+        """
+        Validate a phone candidate using Google's phonenumbers library.
+        Falls back to a digit-count check for OCR-noisy text.
+        """
+        # Try parsing with region hints: international → India → US
+        for region in [None, "IN", "US"]:
+            try:
+                parsed = phonenumbers.parse(text, region)
+                if phonenumbers.is_valid_number(parsed):
+                    return True
+            except phonenumbers.NumberParseException:
+                pass
+        # Fallback: require 7–15 digits (international range)
+        digits = re.sub(r"\D", "", text)
+        return 7 <= len(digits) <= 15
+
+    # ── Main scrubbing pipeline ─────────────────────────────────────────────
 
     def scrub(self, text: str) -> str:
         """
-        Main scrubbing pipeline. Processes text in two phases:
-        
-        Phase 1 — Regex patterns (high precision):
-            Catches structured PII like emails, phones, Aadhaar, PAN, dates, etc.
-            These are replaced first so that NLP doesn't misinterpret them.
-        
-        Phase 2 — NLP entity extraction (names, orgs, locations):
-            Uses spaCy NER to find unstructured PII like person names and addresses.
-            Applies allowlist filtering and confidence thresholds.
-        
-        Returns the sanitized text with all PII replaced by placeholders.
+        Detect and replace all PII in *text*.
+
+        Pipeline:
+          1. Run Presidio AnalyzerEngine to get candidate spans with scores.
+          2. Filter by per-entity confidence threshold.
+          3. Apply allowlist to remove known non-PII terms.
+          4. Additional phone validation via phonenumbers library.
+          5. Deduplicate overlapping spans (keep highest-scoring).
+          6. Replace spans right-to-left to preserve character offsets.
+
+        Returns sanitized text with PII replaced by [TYPE_N] tokens.
         """
-        sanitized = text
+        if not text or not text.strip():
+            return text
 
-        # ── Phase 1: Regex-based detection ──────────────────────────────
-        # Process regex patterns first. This is important because:
-        #   1. Regex is deterministic and precise for structured data
-        #   2. It prevents spaCy from mislabeling emails/phones as names
-        #   3. We replace matches before NLP sees the text
+        # Step 1 — Presidio analysis
+        results = self.analyzer.analyze(
+            text=text,
+            entities=_ENTITIES_TO_DETECT,
+            language="en",
+        )
 
-        for pattern, label_type in self.regex_patterns:
-            matches = re.findall(pattern, sanitized)
-            for match in matches:
-                match = match.strip()
-                if not match or len(match) < 3:
+        # Step 2 & 3 & 4 — Filter
+        candidates = []
+        for r in results:
+            # Threshold filter
+            threshold = THRESHOLDS.get(r.entity_type, 0.70)
+            if r.score < threshold:
+                continue
+
+            span_text = text[r.start:r.end]
+
+            # Allowlist filter
+            if self._is_ignored(span_text):
+                continue
+
+            # Skip tiny spans (usually OCR noise or stray initials)
+            if len(span_text.strip()) <= 2:
+                continue
+
+            # Skip already-replaced tokens like [PERSON_1]
+            if re.match(r"^\[[\w_]+\]$", span_text.strip()):
+                continue
+
+            # Skip DATE spans that are purely 10-digit numbers (likely phones)
+            if r.entity_type == "DATE_TIME":
+                digits_only = re.sub(r"\D", "", span_text)
+                if len(digits_only) == 10 and len(span_text.strip()) == 10:
                     continue
-                    
-                # For PIN codes, skip if it looks like it's part of a year (e.g., "2024")
-                if label_type == "PIN":
-                    if re.match(r'^(19|20)\d{4}$', match):
-                        continue
-                
-                # For PHONE, require minimum 7 meaningful digits
-                if label_type == "PHONE":
-                    digits_only = re.sub(r'\D', '', match)
-                    if len(digits_only) < 7 or len(digits_only) > 15:
-                        continue
 
-                # For CREDIT_CARD, require 13-19 digits and pass Luhn check
-                if label_type == "CREDIT_CARD":
-                    digits_only = re.sub(r'\D', '', match)
-                    if len(digits_only) < 13 or len(digits_only) > 19:
-                        continue
-                    if not self._luhn_check(digits_only):
-                        continue
-
-                # For PASSPORT, skip if it looks like a common abbreviation
-                if label_type == "PASSPORT":
-                    if match[0] in ('V', 'v') and len(match) <= 6:
-                        continue
-
-                sanitized = self._replace_in_text(sanitized, match, label_type)
-
-        # ── Phase 2: NLP entity extraction ──────────────────────────────
-        # Run spaCy on the ALREADY-SANITIZED text. Since regex tokens like
-        # [EMAIL_1] won't be recognized as entities, this is safe.
-        
-        doc = self.nlp(sanitized)
-
-        for ent in doc.ents:
-            target_label = None
-
-            if ent.label_ == "PERSON":
-                target_label = "PERSON"
-            elif ent.label_ == "ORG":
-                target_label = "ORG"
-            elif ent.label_ in ("GPE", "LOC", "FAC"):
-                target_label = "LOCATION"
-
-            if not target_label:
+            # Phone-specific validation
+            if r.entity_type == "PHONE_NUMBER" and not self._validate_phone(span_text):
                 continue
 
-            # Skip allowlisted terms (tech skills, section headers, etc.)
-            if self._is_ignored(ent.text):
-                continue
+            candidates.append(r)
 
-            # Skip very short entities — usually OCR noise
-            if len(ent.text.strip()) <= 2:
-                continue
+        # Step 5 — Deduplicate overlapping spans (greedy, prefer higher score)
+        candidates.sort(key=lambda x: x.score, reverse=True)
+        kept: list = []
+        covered: list[tuple[int, int]] = []
 
-            # Skip entities that are just numbers or already-replaced tokens
-            if re.match(r'^[\d\s\[\]_]+$', ent.text):
-                continue
+        for r in candidates:
+            # Check for overlap with already-kept spans
+            overlaps = any(
+                not (r.end <= s or r.start >= e) for s, e in covered
+            )
+            if not overlaps:
+                kept.append(r)
+                covered.append((r.start, r.end))
 
-            # Skip if the entity looks like it's inside an already-replaced token
-            if '[' in ent.text and ']' in ent.text:
-                continue
+        # Step 6 — Replace right-to-left to keep offsets valid
+        kept.sort(key=lambda x: x.start, reverse=True)
 
-            sanitized = self._replace_in_text(sanitized, ent.text, target_label)
+        sanitized = text
+        for r in kept:
+            label_type = PRESIDIO_TO_LABEL.get(r.entity_type, r.entity_type)
+            # Use the original text positions (right-to-left guarantees validity)
+            original_span = text[r.start:r.end]
+            token = self._get_or_create_token(original_span, label_type)
+            sanitized = sanitized[: r.start] + token + sanitized[r.end :]
 
         return sanitized
 
+    # ── Restoration ────────────────────────────────────────────────────────
+
     def restore(self, text: str) -> str:
         """
-        Reverse the scrubbing — replace all placeholder tokens with original values.
+        Reverse the scrubbing — replace all [TYPE_N] tokens with originals.
         Sorts by token length (longest first) to prevent partial replacements
         (e.g., replacing [PERSON_1] before [PERSON_10]).
         """
@@ -322,6 +393,8 @@ class PIIEngine:
         for token in sorted(self.pii_map.keys(), key=len, reverse=True):
             restored = restored.replace(token, self.pii_map[token])
         return restored
+
+    # ── Summary ────────────────────────────────────────────────────────────
 
     def get_summary(self) -> dict:
         """Return a summary of all PII entities detected."""
@@ -331,20 +404,6 @@ class PIIEngine:
             type_counts[t] = type_counts.get(t, 0) + 1
         return {
             "total_entities": len(self.entities_found),
-            "by_type": type_counts,
-            "details": self.entities_found,
+            "by_type":        type_counts,
+            "details":        self.entities_found,
         }
-
-    @staticmethod
-    def _luhn_check(card_number: str) -> bool:
-        """Validate a credit card number using the Luhn algorithm."""
-        digits = [int(d) for d in card_number]
-        digits.reverse()
-        total = 0
-        for i, d in enumerate(digits):
-            if i % 2 == 1:
-                d *= 2
-                if d > 9:
-                    d -= 9
-            total += d
-        return total % 10 == 0

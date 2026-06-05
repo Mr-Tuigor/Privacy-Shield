@@ -16,6 +16,7 @@
       --accent-hover: #2563eb;
       --success: #10b981;
       --danger: #ef4444;
+      --warning: #f59e0b;
       --border-color: rgba(255, 255, 255, 0.1);
     }
 
@@ -65,7 +66,6 @@
       padding: 2rem;
       margin-bottom: 2rem;
       box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-      transition: transform 0.3s ease;
     }
 
     .glass-card:hover {
@@ -159,20 +159,11 @@
       cursor: pointer;
       font-family: inherit;
       transition: all 0.2s;
-      margin-top: 1rem;
       align-self: flex-start;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
     }
-
-    /* PDF image */
-
-    .image-preview {
-      width: 100%;
-      max-height: 500px;
-      object-fit: contain;
-      border-radius: 8px;
-    }
-
-    /* pdf image */
 
     button.submit-btn:hover {
       background: var(--accent-hover);
@@ -181,14 +172,12 @@
 
     .spinner {
       display: none;
-      border: 3px solid rgba(255, 255, 255, 0.1);
+      border: 3px solid rgba(255, 255, 255, 0.2);
       border-radius: 50%;
-      border-top: 3px solid var(--accent);
-      width: 24px;
-      height: 24px;
+      border-top: 3px solid white;
+      width: 20px;
+      height: 20px;
       animation: spin 1s linear infinite;
-      margin-left: 10px;
-      vertical-align: middle;
     }
 
     @keyframes spin {
@@ -201,12 +190,163 @@
       }
     }
 
-    /* Results section */
     #results-container {
       display: none;
       margin-top: 2rem;
     }
 
+    /* ── Redacted Words Panel ── */
+    #redacted-panel {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(167, 139, 250, 0.3);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    #redacted-panel .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    #redacted-panel .panel-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #c4b5fd;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #redacted-panel .panel-title span.count-badge {
+      background: rgba(167, 139, 250, 0.25);
+      color: #c4b5fd;
+      border-radius: 999px;
+      padding: 0.1rem 0.6rem;
+      font-size: 0.8rem;
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid;
+      transition: all 0.2s;
+    }
+
+    .action-btn.select-all {
+      background: rgba(59, 130, 246, 0.15);
+      color: #93c5fd;
+      border-color: rgba(59, 130, 246, 0.35);
+    }
+
+    .action-btn.deselect {
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-muted);
+      border-color: rgba(148, 163, 184, 0.25);
+    }
+
+    .action-btn.send-ignore {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fcd34d;
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+
+    .action-btn.send-all {
+      background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .action-btn:hover {
+      filter: brightness(1.3);
+      transform: translateY(-1px);
+    }
+
+    /* Scrollable words area — constant height */
+    #words-scroll {
+      max-height: 130px;
+      overflow-y: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding-right: 4px;
+    }
+
+    #words-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    #words-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #words-scroll::-webkit-scrollbar-thumb {
+      background: rgba(167, 139, 250, 0.35);
+      border-radius: 4px;
+    }
+
+    /* Word pill — acts like a toggle checkbox */
+    .word-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1.5px solid rgba(167, 139, 250, 0.35);
+      background: rgba(167, 139, 250, 0.08);
+      color: #c4b5fd;
+      user-select: none;
+      transition: all 0.18s ease;
+    }
+
+    .word-pill:hover {
+      background: rgba(167, 139, 250, 0.2);
+      border-color: rgba(167, 139, 250, 0.6);
+    }
+
+    .word-pill.selected {
+      background: rgba(167, 139, 250, 0.28);
+      border-color: #a78bfa;
+      color: #e9d5ff;
+      box-shadow: 0 0 8px rgba(167, 139, 250, 0.3);
+    }
+
+    .word-pill .pill-type {
+      font-size: 0.68rem;
+      opacity: 0.7;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .word-pill .pill-check {
+      font-size: 0.8rem;
+    }
+
+    #ignore-feedback {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      min-height: 1.2em;
+      transition: opacity 0.3s;
+    }
+
+    /* Results */
     .results-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -243,7 +383,7 @@
 
     .text-preview {
       white-space: pre-wrap;
-      font-family: 'Courier New', Courier, monospace;
+      font-family: 'Courier New', monospace;
       font-size: 0.9rem;
       line-height: 1.5;
       color: #e2e8f0;
@@ -266,6 +406,10 @@
       margin-bottom: 0.5rem;
     }
 
+    #entities-container {
+      margin-bottom: 0.5rem;
+    }
+
     @media (max-width: 768px) {
       .results-grid {
         grid-template-columns: 1fr;
@@ -275,15 +419,14 @@
 </head>
 
 <body>
-
   <div class="container">
     <h1>Privacy Shield</h1>
     <p class="subtitle">Intelligently detect and redact PII from text, images, and PDFs</p>
 
     <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('text')">Text Input</button>
-      <button class="tab-btn" onclick="switchTab('image')">Image Upload</button>
-      <button class="tab-btn" onclick="switchTab('pdf')">PDF Upload</button>
+      <button class="tab-btn active" onclick="switchTab('text', event)">Text Input</button>
+      <button class="tab-btn" onclick="switchTab('image', event)">Image Upload</button>
+      <button class="tab-btn" onclick="switchTab('pdf', event)">PDF Upload</button>
     </div>
 
     <!-- Text Form -->
@@ -328,13 +471,36 @@
 
     <!-- Results Area -->
     <div id="results-container" class="glass-card">
-      <h2 style="margin-bottom: 1.5rem; color: white;">Analysis Results</h2>
+      <h2 style="margin-bottom:1.5rem;color:white;">Analysis Results</h2>
 
-      <div id="entities-container" style="margin-bottom: 1.5rem;"></div>
+      <!-- ── Redacted Words Panel (always at top) ── -->
+      <div id="redacted-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            🔒 Redacted Words: Help us to make this better by selecting what should not be redacted/masked.
+            <span class="count-badge" id="pill-count">0</span>
+          </div>
+          <div class="panel-actions">
+            <button class="action-btn select-all" onclick="selectAllPills()">Select All</button>
+            <button class="action-btn deselect" onclick="deselectAllPills()">Deselect All</button>
+            <button class="action-btn send-ignore" onclick="sendSelectedToIgnore()">Add Selected to Ignore List</button>
+            <button class="action-btn send-all" onclick="sendAllToIgnore()">Add All (worst case)</button>
+          </div>
+        </div>
 
-      <div class="results-grid" id="main-results">
-        <!-- Will be populated dynamically -->
+        <!-- Scrollable pill area — fixed max-height -->
+        <div id="words-scroll">
+          <span style="color:var(--text-muted);font-size:0.85rem;">No redacted words yet.</span>
+        </div>
+
+        <div id="ignore-feedback"></div>
       </div>
+
+      <!-- Summary badges -->
+      <div id="entities-container" style="margin-bottom:1.5rem;"></div>
+
+      <!-- Main results grid -->
+      <div class="results-grid" id="main-results"></div>
     </div>
 
   </div>
@@ -342,43 +508,186 @@
   <script>
     const API_BASE = "http://localhost:8000/api";
 
-    function switchTab(tabId) {
+    // Holds the current pii_map: { "[TOKEN]": "original value" }
+    let currentPiiMap = {};
+
+    /* ── Tab switching ── */
+    function switchTab(tabId, e) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-
       document.getElementById('tab-' + tabId).classList.add('active');
-      event.target.classList.add('active');
-
-      // Hide results container when switching
+      if (e && e.target) e.target.classList.add('active');
       document.getElementById('results-container').style.display = 'none';
+      currentPiiMap = {};
     }
 
+    /* ── Spinner ── */
     function toggleSpinner(id, show) {
       document.getElementById(id).style.display = show ? 'inline-block' : 'none';
     }
 
+    /* ── Entity summary badges ── */
     function renderEntities(entitiesInfo) {
-      const container = document.getElementById('entities-container');
+      const c = document.getElementById('entities-container');
       if (!entitiesInfo || entitiesInfo.total_entities === 0) {
-        container.innerHTML = '<span style="color: var(--text-muted)">No PII detected.</span>';
+        c.innerHTML = '<span style="color:var(--text-muted)">No PII detected.</span>';
         return;
       }
-
-      let html = `<p style="margin-bottom: 0.5rem">Found <strong>${entitiesInfo.total_entities}</strong> sensitive items:</p>`;
+      let html = `<p style="margin-bottom:0.5rem">Found <strong>${entitiesInfo.total_entities}</strong> sensitive items:</p>`;
       for (const [type, count] of Object.entries(entitiesInfo.by_type)) {
         html += `<span class="badge">${type}: ${count}</span>`;
       }
-      container.innerHTML = html;
+      c.innerHTML = html;
     }
 
-    function showResultsContainers() {
+    /* ── Redacted Words Panel ── */
+    function buildPiiMap(pii_map) {
+      currentPiiMap = pii_map || {};
+    }
+
+    function renderRedactedPanel() {
+      const scroll = document.getElementById('words-scroll');
+      const countBadge = document.getElementById('pill-count');
+      const entries = Object.entries(currentPiiMap); // [ ["[TYPE_1]", "original"], ... ]
+
+      if (!entries.length) {
+        scroll.innerHTML = '<span style="color:var(--text-muted);font-size:0.85rem;">No redacted words detected.</span>';
+        countBadge.textContent = '0';
+        return;
+      }
+
+      countBadge.textContent = entries.length;
+
+      // Sort by type label for visual grouping
+      entries.sort((a, b) => a[0].localeCompare(b[0]));
+
+      scroll.innerHTML = '';
+      entries.forEach(([token, original]) => {
+        // Extract type label from token like [PERSON_1]
+        const typeMatch = token.match(/^\[([A-Z_]+)_\d+\]$/);
+        const typeLabel = typeMatch ? typeMatch[1] : 'PII';
+
+        const pill = document.createElement('span');
+        pill.className = 'word-pill';
+        pill.dataset.token = token;
+        pill.dataset.value = original;
+        pill.innerHTML = `
+          <span class="pill-check">○</span>
+          <span>${escapeHtml(original)}</span>
+          <span class="pill-type">${typeLabel}</span>
+        `;
+        pill.addEventListener('click', () => togglePill(pill));
+        scroll.appendChild(pill);
+      });
+
+      clearFeedback();
+    }
+
+    function togglePill(pill) {
+      pill.classList.toggle('selected');
+      pill.querySelector('.pill-check').textContent = pill.classList.contains('selected') ? '✓' : '○';
+    }
+
+    function selectAllPills() {
+      document.querySelectorAll('.word-pill').forEach(p => {
+        p.classList.add('selected');
+        p.querySelector('.pill-check').textContent = '✓';
+      });
+    }
+
+    function deselectAllPills() {
+      document.querySelectorAll('.word-pill').forEach(p => {
+        p.classList.remove('selected');
+        p.querySelector('.pill-check').textContent = '○';
+      });
+    }
+
+    function getSelectedWords() {
+      return [...document.querySelectorAll('.word-pill.selected')].map(p => p.dataset.value);
+    }
+
+    function getAllWords() {
+      return [...document.querySelectorAll('.word-pill')].map(p => p.dataset.value);
+    }
+
+    async function sendSelectedToIgnore() {
+      const words = getSelectedWords();
+      if (!words.length) {
+        showFeedback('⚠ No words selected. Click words to select them first.', '#f59e0b');
+        return;
+      }
+      const confirmed = confirm(
+        `Are you sure you want to add these ${words.length} word(s) to the ignore list?\n\n` +
+        words.map(w => `• ${w}`).join('\n') +
+        '\n\nThey will never be redacted in future scans.'
+      );
+      if (!confirmed) return;
+      await postIgnore(words);
+    }
+
+    async function sendAllToIgnore() {
+      const words = getAllWords();
+      if (!words.length) {
+        showFeedback('⚠ No redacted words to add.', '#f59e0b');
+        return;
+      }
+      const confirmed = confirm(
+        `⚠ WORST CASE: Are you absolutely sure you want to add ALL ${words.length} redacted word(s) to the ignore list?\n\n` +
+        words.map(w => `• ${w}`).join('\n') +
+        '\n\nThis will permanently prevent ALL of these from being redacted in future. This action cannot be undone easily.'
+      );
+      if (!confirmed) return;
+      await postIgnore(words);
+    }
+
+    async function postIgnore(words) {
+      try {
+        const res = await fetch(`${API_BASE}/add-to-ignore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ words })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Server error');
+        const added = data.added.length;
+        const skipped = data.skipped_duplicates;
+        let msg = `✓ Added ${added} word(s) to ignore list.`;
+        if (skipped > 0) msg += ` (${skipped} already existed — skipped)`;
+        showFeedback(msg, '#10b981');
+      } catch (e) {
+        showFeedback('✗ Failed: ' + e.message, '#ef4444');
+      }
+    }
+
+    function showFeedback(msg, color) {
+      const el = document.getElementById('ignore-feedback');
+      el.style.color = color;
+      el.textContent = msg;
+      el.style.opacity = '1';
+      setTimeout(() => { el.style.opacity = '0'; }, 5000);
+    }
+
+    function clearFeedback() {
+      const el = document.getElementById('ignore-feedback');
+      el.textContent = '';
+      el.style.opacity = '1';
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /* ── Show results container ── */
+    function showResults() {
       document.getElementById('results-container').style.display = 'block';
     }
 
+    /* ── Text Tab ── */
     async function submitText() {
       const text = document.getElementById('text-input').value;
       if (!text) return alert('Please enter some text');
-
       toggleSpinner('spinner-text', true);
       try {
         const res = await fetch(`${API_BASE}/scrub-text`, {
@@ -387,132 +696,100 @@
           body: JSON.stringify({ text })
         });
         const data = await res.json();
-
+        buildPiiMap(data.pii_map);
+        renderRedactedPanel();
         renderEntities(data.entities);
         document.getElementById('main-results').innerHTML = `
           <div class="result-box">
             <h3>Original text</h3>
-            <div class="text-preview">${data.original}</div>
+            <div class="text-preview">${escapeHtml(data.original)}</div>
           </div>
           <div class="result-box">
             <h3>Sanitized text</h3>
-            <div class="text-preview" style="color: #a78bfa;">${data.sanitized}</div>
+            <div class="text-preview" style="color:#a78bfa;">${escapeHtml(data.sanitized)}</div>
           </div>
         `;
-        showResultsContainers();
-      } catch (e) {
-        alert("API Error: " + e.message);
-      }
+        showResults();
+      } catch (e) { alert('API Error: ' + e.message); }
       toggleSpinner('spinner-text', false);
     }
 
+    /* ── Image Tab ── */
     async function submitImage() {
       const fileInput = document.getElementById('image-file');
       if (!fileInput.files.length) return alert('Please select an image');
-
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
-
       toggleSpinner('spinner-image', true);
       try {
         const res = await fetch(`${API_BASE}/redact-image`, { method: 'POST', body: formData });
         const data = await res.json();
-
-        if (!res.ok) throw new Error(data.detail || "Server error");
-
+        if (!res.ok) throw new Error(data.detail || 'Server error');
+        buildPiiMap(data.pii_map);
+        renderRedactedPanel();
         renderEntities(data.entities);
         document.getElementById('main-results').innerHTML = `
           <div class="result-box">
             <h3>📸 Original Image</h3>
             <img src="${data.original_image_base64}" class="image-preview">
-            <h4 style="margin-top:1rem; color:var(--text-muted)">Extracted Text:</h4>
-            <div class="text-preview">${data.original_text || "No text"}</div>
+            <h4 style="margin-top:1rem;color:var(--text-muted)">Extracted Text:</h4>
+            <div class="text-preview">${escapeHtml(data.original_text || 'No text')}</div>
           </div>
           <div class="result-box">
             <h3>🛡️ Masked Image</h3>
-            <img src="${data.redacted_image_base64}" class="image-preview" style="border-color: #ef4444">
-            <h4 style="margin-top:1rem; color:var(--text-muted)">Sanitized Text:</h4>
-            <div class="text-preview" style="color: #a78bfa;">${data.sanitized_text || "No text"}</div>
+            <img src="${data.redacted_image_base64}" class="image-preview" style="border-color:#ef4444">
+            <h4 style="margin-top:1rem;color:var(--text-muted)">Sanitized Text:</h4>
+            <div class="text-preview" style="color:#a78bfa;">${escapeHtml(data.sanitized_text || 'No text')}</div>
           </div>
         `;
-        showResultsContainers();
-      } catch (e) {
-        alert("API Error: " + e.message);
-      }
+        showResults();
+      } catch (e) { alert('API Error: ' + e.message); }
       toggleSpinner('spinner-image', false);
     }
 
+    /* ── PDF Tab ── */
     async function submitPdf() {
       const fileInput = document.getElementById('pdf-file');
       if (!fileInput.files.length) return alert('Please select a PDF');
-
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
-
       toggleSpinner('spinner-pdf', true);
       try {
         const res = await fetch(`${API_BASE}/redact-pdf`, { method: 'POST', body: formData });
         const data = await res.json();
-
-        if (!res.ok) throw new Error(data.detail || "Server error");
-
+        if (!res.ok) throw new Error(data.detail || 'Server error');
+        buildPiiMap(data.pii_map);
+        renderRedactedPanel();
         renderEntities(data.entities);
-
-        // Build view for all pages
         let gridHtml = '';
         data.pages.forEach(p => {
           gridHtml += `
-    <div class="result-box" style="grid-column: 1 / -1; background: rgba(0,0,0,0.4); text-align: center; margin-top:1rem;">
-      <h2 style="color:white;">
-        Page ${p.page_number} (${p.extraction_method || 'Unknown'})
-      </h2>
-    </div>
-  `;
-
-          // ✅ ALWAYS prefer image view if available
+            <div class="result-box" style="grid-column:1/-1;background:rgba(0,0,0,0.4);text-align:center;">
+              <h2 style="color:white;">Page ${p.page_number} (${p.extraction_method || 'Unknown'})</h2>
+            </div>`;
           if (p.original_image_base64 && p.redacted_image_base64) {
             gridHtml += `
-      <div class="result-box">
-        <h3>Original PDF Page</h3>
-        <img src="${p.original_image_base64}" class="image-preview">
-        <div class="text-preview" style="margin-top:1rem;">
-          ${p.original_text || ''}
-        </div>
-      </div>
-
-      <div class="result-box">
-        <h3>Redacted PDF Page</h3>
-        <img src="${p.redacted_image_base64}" class="image-preview" style="border-color: #ef4444">
-        <div class="text-preview" style="margin-top:1rem; color: #a78bfa;">
-          ${p.sanitized_text || ''}
-        </div>
-      </div>
-    `;
-          }
-          // ⚠️ fallback (should rarely happen now)
-          else {
+              <div class="result-box">
+                <h3>Original PDF Page</h3>
+                <img src="${p.original_image_base64}" class="image-preview">
+                <div class="text-preview" style="margin-top:1rem;">${escapeHtml(p.original_text || '')}</div>
+              </div>
+              <div class="result-box">
+                <h3>Redacted PDF Page</h3>
+                <img src="${p.redacted_image_base64}" class="image-preview" style="border-color:#ef4444">
+                <div class="text-preview" style="margin-top:1rem;color:#a78bfa;">${escapeHtml(p.sanitized_text || '')}</div>
+              </div>`;
+          } else {
             gridHtml += `
-      <div class="result-box" style="grid-column: 1 / -1; display:flex; gap:1rem;">
-        <div style="flex:1">
-          <h3>Original Text</h3>
-          <div class="text-preview">${p.original_text}</div>
-        </div>
-        <div style="flex:1">
-          <h3>Masked Text</h3>
-          <div class="text-preview" style="color: #a78bfa;">
-            ${p.sanitized_text}
-          </div>
-        </div>
-      </div>
-    `;
+              <div class="result-box" style="grid-column:1/-1;display:flex;gap:1rem;">
+                <div style="flex:1"><h3>Original Text</h3><div class="text-preview">${escapeHtml(p.original_text)}</div></div>
+                <div style="flex:1"><h3>Masked Text</h3><div class="text-preview" style="color:#a78bfa;">${escapeHtml(p.sanitized_text)}</div></div>
+              </div>`;
           }
-        });;
-
+        });
         document.getElementById('main-results').innerHTML = gridHtml;
-        showResultsContainers();
-      } catch (e) {
-        alert("API Error: " + e.message);
-      }
+        showResults();
+      } catch (e) { alert('API Error: ' + e.message); }
       toggleSpinner('spinner-pdf', false);
     }
   </script>

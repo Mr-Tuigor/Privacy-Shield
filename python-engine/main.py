@@ -29,7 +29,7 @@ app.add_middleware(
 # ── Pre-load heavy ML models at startup (not per-request) ───────────
 # These are class-level singletons — loading them here warms the cache
 # so the first request doesn't have a cold start.
-PIIEngine._load_nlp()
+PIIEngine._build_analyzer()
 ImageRedactor._load_reader()
 
 # ── Instantiate handlers that hold the loaded models ────────────────
@@ -53,7 +53,7 @@ def health_check():
         "status": "healthy",
         "service": "Privacy Shield API",
         "models_loaded": {
-            "spacy": PIIEngine._nlp is not None,
+            "presidio": PIIEngine._analyzer is not None,
             "easyocr": ImageRedactor._reader is not None,
         },
     }
@@ -93,6 +93,70 @@ def restore_text(payload: RestorePayload):
     engine.pii_map = payload.pii_map
     restored = engine.restore(payload.text)
     return {"restored": restored}
+
+
+# ── Ignore list management ──────────────────────────────────────────
+import os as _os
+
+_IGNORE_FILE = _os.path.join(_os.path.dirname(__file__), "ignore_list.txt")
+
+
+class IgnorePayload(BaseModel):
+    words: list[str]
+
+
+@app.post("/api/add-to-ignore")
+def add_to_ignore(payload: IgnorePayload):
+    """
+    Append one or more words/phrases to ignore_list.txt so they are never
+    redacted in future requests.
+
+    Words are normalised to lower-case and deduplicated against existing
+    entries before writing. The PIIEngine singleton is NOT reloaded here —
+    the new terms take effect on the next server restart or new engine
+    instance (each request already creates a fresh PIIEngine that re-reads
+    the file).
+    """
+    if not payload.words:
+        raise HTTPException(status_code=400, detail="No words provided.")
+
+    # Read existing entries to avoid duplicates
+    existing: set[str] = set()
+    if _os.path.exists(_IGNORE_FILE):
+        with open(_IGNORE_FILE, "r", encoding="utf-8") as fh:
+            for line in fh:
+                t = line.strip()
+                if t and not t.startswith("#"):
+                    existing.add(t.lower())
+
+    new_words = [w.strip().lower() for w in payload.words if w.strip()]
+    added = [w for w in new_words if w and w not in existing]
+
+    if added:
+        with open(_IGNORE_FILE, "a", encoding="utf-8") as fh:
+            fh.write("\n# Added via UI\n")
+            for word in added:
+                fh.write(word + "\n")
+
+    return {
+        "status": "ok",
+        "added": added,
+        "skipped_duplicates": len(new_words) - len(added),
+    }
+
+
+@app.get("/api/get-ignore-list")
+def get_ignore_list():
+    """Return the current contents of ignore_list.txt (non-comment lines)."""
+    if not _os.path.exists(_IGNORE_FILE):
+        return {"words": []}
+    words = []
+    with open(_IGNORE_FILE, "r", encoding="utf-8") as fh:
+        for line in fh:
+            t = line.strip()
+            if t and not t.startswith("#"):
+                words.append(t)
+    return {"words": words}
 
 
 # ── Image redaction ─────────────────────────────────────────────────
