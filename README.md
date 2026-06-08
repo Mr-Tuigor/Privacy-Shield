@@ -173,9 +173,9 @@ Privacy Shield uses a **two-phase detection pipeline**:
 ---
 
 ## Screenshots
-<img width="1920" height="1020" alt="Screenshot 2026-03-29 195904" src="assets/1.png" />
-<img width="1920" height="1020" alt="Screenshot 2026-03-29 195904" src="assets/2.png" />
-<img width="1920" height="1020" alt="Screenshot 2026-03-29 195904" src="assets/3.png" />
+<img width="1920" height="1020" alt="Screenshot 1" src="assets/1.png" />
+<img width="1920" height="1020" alt="Screenshot 2" src="assets/2.png" />
+<img width="1920" height="1020" alt="Screenshot 3" src="assets/3.png" />
 ### Text Redaction
 Upload or paste text containing personal information → see the original alongside the sanitized version with all PII replaced by safe placeholders.
 
